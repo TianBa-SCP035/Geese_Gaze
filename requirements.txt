@@ -1,0 +1,25 @@
+# 核心依赖
+opencv-python>=4.5.0
+numpy>=1.19.0
+Pillow>=8.0.0
+
+# QR码识别
+pyzbar>=0.1.9
+zxing-cpp>=2.0.0
+qreader>=3.0.0
+
+# GUI和可视化
+matplotlib>=3.3.0
+
+# 网络请求
+requests>=2.25.0
+
+# 系统监控
+psutil>=5.8.0
+
+# PyInstaller相关（用于打包）
+pyinstaller>=4.5.0
+
+# 其他工具
+scipy>=1.6.0
+pandas>=1.2.0
