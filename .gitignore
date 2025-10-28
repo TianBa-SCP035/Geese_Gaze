@@ -1,0 +1,13 @@
+# Python缓存文件
+__pycache__/
+
+# PyInstaller构建文件
+build/
+dist/
+
+# 项目结果文件
+Result/
+cut_results/
+qr_results.json
+picture/
+template.json
