@@ -4,7 +4,7 @@ import json
 import os
 
 class LineCalibrator:
-    def __init__(self, image_path=None, output_file="template.json", rows=12, cols=8):
+    def __init__(self, image_path=None, output_file=None, rows=9, cols=9):
         """
         初始化标定器
         :param image_path: 图片路径
@@ -13,7 +13,11 @@ class LineCalibrator:
         :param cols: 孔版列数
         """
         self.image_path = image_path
-        self.output_file = output_file
+        # 如果没有指定输出文件，根据行列数生成默认文件名
+        if output_file is None:
+            self.output_file = f"template_{rows}x{cols}.json"
+        else:
+            self.output_file = output_file
         self.rows = rows  # 孔版行数
         self.cols = cols  # 孔版列数
         self.vertical_lines = []  # 竖线列表
@@ -90,7 +94,7 @@ class LineCalibrator:
         
         # 确保输出文件路径不为None
         if self.output_file is None:
-            self.output_file = "template.json"
+            self.output_file = f"template_{self.rows}x{self.cols}.json"
             print(f"警告：输出文件路径未指定，使用默认路径: {self.output_file}")
         
         print("画线标定说明：")
@@ -346,7 +350,7 @@ class LineCalibrator:
         return [f"{chr(65 + row)}{col + 1}" for row in range(self.rows) for col in range(self.cols)]
 
 
-def cli_main(image_path, output_file, rows=12, cols=8):
+def cli_main(image_path, output_file, rows=9, cols=9):
     """既可被导入调用，也可供 __main__ 使用的统一入口"""
     calibrator = LineCalibrator(image_path, output_file, rows, cols)
     return calibrator.calibrate()
@@ -355,9 +359,10 @@ if __name__ == "__main__":
     import sys
     # 从命令行参数获取图片路径、输出文件路径和孔版大小
     image_path = sys.argv[1] if len(sys.argv) > 1 else "IMG_11.jpg"
-    output_file = sys.argv[2] if len(sys.argv) > 2 else "template.json"
-    rows = int(sys.argv[3]) if len(sys.argv) > 3 else 12
-    cols = int(sys.argv[4]) if len(sys.argv) > 4 else 8
+    # 如果没有指定输出文件，根据行列数生成默认文件名
+    rows = int(sys.argv[3]) if len(sys.argv) > 3 else 9
+    cols = int(sys.argv[4]) if len(sys.argv) > 4 else 9
+    output_file = sys.argv[2] if len(sys.argv) > 2 else f"template_{rows}x{cols}.json"
     
     # 不再限制最大行列数，使用用户设置的值
     cli_main(image_path, output_file, rows, cols)

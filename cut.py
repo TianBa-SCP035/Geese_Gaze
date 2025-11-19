@@ -8,19 +8,19 @@ import os
 ROI_EXPANSION_RATIO = 1.1
 
 class TubePlateProcessor:
-    def __init__(self, template_file="template.json"):
+    def __init__(self, template_file="template_9x9.json"):
         """
         初始化处理器
         :param template_file: 模板文件路径
         """
         self.template_file = template_file
         self.positions = None
-        self.rows = 12  # 默认行数
-        self.cols = 8   # 默认列数
+        self.rows = 9  # 默认行数
+        self.cols = 9   # 默认列数
         self.labels = self._generate_labels()
         
-        # 如果模板文件存在，加载模板
-        if os.path.exists(template_file):
+        # 如果模板文件存在且不为None，加载模板
+        if template_file is not None and os.path.exists(template_file):
             self.load_template()
     
     def _generate_labels(self):
@@ -55,14 +55,18 @@ class TubePlateProcessor:
     def load_template(self):
         """从文件加载模板"""
         try:
+            if self.template_file is None:
+                print("错误：没有指定模板文件路径")
+                return False
+                
             with open(self.template_file, 'r') as f:
                 template_data = json.load(f)
             
             self.positions = template_data.get('positions', [])
             
             # 加载孔版行列数信息，如果不存在则使用默认值
-            self.rows = template_data.get('rows', 12)
-            self.cols = template_data.get('cols', 8)
+            self.rows = template_data.get('rows', 9)
+            self.cols = template_data.get('cols', 9)
             
             # 重新生成标签
             self.labels = self._generate_labels()
@@ -179,7 +183,7 @@ if __name__ == "__main__":
     # 创建处理器
     processor = TubePlateProcessor()
     
-    # 如果没有模板文件，进行标定
+    # 如果模板文件不存在，提示用户
     if not os.path.exists(processor.template_file):
         print("没有找到模板文件，请先运行line_calibrate.py进行标定")
         exit(1)

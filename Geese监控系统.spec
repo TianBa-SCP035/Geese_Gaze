@@ -11,7 +11,6 @@ a = Analysis(
         ('C:\\Users\\admin\\.conda\\envs\\DICK\\Lib\\site-packages\\pyzbar\\libiconv.dll', '.'),
     ],
     datas=[
-        ('template.json', '.'),  # 包含模板文件
         ('Geese.ico', '.'),  # 包含图标文件
         ('geese32.ico', '.'),  # 包含32x32小图标文件
         # 添加qrdet模型文件

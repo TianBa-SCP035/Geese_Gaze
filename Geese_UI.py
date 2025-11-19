@@ -3,7 +3,6 @@ import sys
 import json
 import threading
 import time
-import subprocess
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 from datetime import datetime
@@ -12,7 +11,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from PIL import Image, ImageTk
 import requests
-import psutil
 import cv2
 import platform
 import random
@@ -48,31 +46,33 @@ class GeeseUI:
         self.root.geometry("1200x900")
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
-        # 设置窗口图标
-        self.set_window_icon()
-        
         # 初始化变量
         self.monitoring = True
         self.auto_send = True  # 自动发送开关
-        self.processor = TubePlateProcessor("template.json")
-        self.processed_files = set()
         self.qr_results = {}
         self.server_url = "http://172.16.1.141:10511/apiEntitySample/GetSampleScanData.json"  # 默认后端接口地址
         self.watch_dir = "picture"  # 默认监控文件夹路径
-        self.subprocesses = []  # 存储所有子进程的引用
+        self.processing_lock = threading.Lock()  # 图片处理互斥锁
         
         # 孔版行列数
         self.rows = 9
         self.cols = 9
+        self.machine_code = 1
         
-        # 创建UI组件
+        # 初始化处理器为None，稍后创建
+        self.processor = None
+        
+        # 创建UI组件（包含log_text）
         self.create_widgets()
+        
+        # 设置窗口图标（现在可以安全使用self.log）
+        self.set_window_icon()
         
         # 加载配置
         self.load_config()
         
-        # 检查并创建监控文件夹
-        self.ensure_watch_dir_exists()
+        # 创建处理器
+        self._reset_processor_with_template(self.get_template_path())
         
         # 检查模板是否存在
         self.check_template()
@@ -83,6 +83,18 @@ class GeeseUI:
             monitor_thread = threading.Thread(target=self.monitor_directory)
             monitor_thread.daemon = True
             monitor_thread.start()
+    
+    def get_template_path(self):
+        """根据当前行列数生成模板文件名"""
+        return f"template_{self.rows}x{self.cols}.json"
+    
+    def _reset_processor_with_template(self, template_path):
+        """重置处理器并同步行列数和标签"""
+        self.processor = TubePlateProcessor(template_path)
+        self.processor.rows = self.rows
+        self.processor.cols = self.cols
+        if hasattr(self.processor, "_generate_labels"):
+            self.processor.labels = self.processor._generate_labels()
         
     def create_widgets(self):
         """创建UI组件"""
@@ -218,10 +230,10 @@ class GeeseUI:
             self.log(f"已创建监控文件夹: {self.watch_dir}")
     
     def load_config(self):
-        """从template.json加载配置"""
+        """从config.json加载配置"""
         try:
-            if os.path.exists("template.json"):
-                with open("template.json", "r") as f:
+            if os.path.exists("config.json"):
+                with open("config.json", "r") as f:
                     config = json.load(f)
                 
                 # 加载接口地址
@@ -239,8 +251,8 @@ class GeeseUI:
                     self.ensure_watch_dir_exists()
                 
                 # 加载孔版行列数
-                self.rows = config.get('rows', 8)
-                self.cols = config.get('cols', 12)
+                self.rows = config.get('rows', 9)
+                self.cols = config.get('cols', 9)
                 
                 # 加载机器码
                 self.machine_code = config.get('machine_code', 1)
@@ -248,10 +260,6 @@ class GeeseUI:
                 # 更新UI控件的值
                 self.rows_var.set(self.rows)
                 self.cols_var.set(self.cols)
-                
-                # 更新处理器的行列数
-                self.processor.rows = self.rows
-                self.processor.cols = self.cols
                 
                 self.log(f"孔版布局: {self.rows}行 x {self.cols}列")
                 self.log(f"机器码: {self.machine_code}")
@@ -264,10 +272,6 @@ class GeeseUI:
                 # 更新UI控件的值
                 self.rows_var.set(self.rows)
                 self.cols_var.set(self.cols)
-                
-                # 更新处理器的行列数
-                self.processor.rows = self.rows
-                self.processor.cols = self.cols
                 
                 self.log("使用默认配置")
                 self.log(f"孔版布局: {self.rows}行 x {self.cols}列")
@@ -283,21 +287,17 @@ class GeeseUI:
             self.rows_var.set(self.rows)
             self.cols_var.set(self.cols)
             
-            # 更新处理器的行列数
-            self.processor.rows = self.rows
-            self.processor.cols = self.cols
-            
             self.log("使用默认配置")
             self.log(f"孔版布局: {self.rows}行 x {self.cols}列")
             self.log(f"机器码: {self.machine_code}")
     
     def save_config(self):
-        """保存配置到template.json"""
+        """保存配置到config.json"""
         try:
-            # 读取现有的template.json
+            # 读取现有的config.json
             config = {}
-            if os.path.exists("template.json"):
-                with open("template.json", "r") as f:
+            if os.path.exists("config.json"):
+                with open("config.json", "r") as f:
                     config = json.load(f)
             
             # 更新配置
@@ -308,7 +308,7 @@ class GeeseUI:
             config["machine_code"] = self.machine_code
             
             # 保存配置
-            with open("template.json", "w") as f:
+            with open("config.json", "w") as f:
                 json.dump(config, f, indent=2)
                 
             self.log("配置已保存")
@@ -467,13 +467,19 @@ class GeeseUI:
     
     def check_template(self):
         """检查模板是否存在"""
-        if os.path.exists("template.json"):
+        template_file = self.get_template_path()
+        if os.path.exists(template_file):
             self.template_status_var.set("模板已加载")
-            self.processor.load_template()
-            self.log("模板已从 template.json 加载")
+            self.log(f"模板已从 {template_file} 加载")
+            
+            # 确保处理器使用正确的模板文件
+            if self.processor:
+                self.processor.template_file = template_file
+                # 不再重复加载模板，因为TubePlateProcessor构造函数已经处理了
+                # self.processor.load_template()
         else:
             self.template_status_var.set("模板不存在，请先画模板")
-            self.log("警告：模板文件 template.json 不存在，请先点击'重新画模板'按钮")
+            self.log(f"警告：模板文件 {template_file} 不存在，请先点击'重新画模板'按钮")
     
     def log(self, message):
         """添加日志消息"""
@@ -699,7 +705,7 @@ class GeeseUI:
                 bounds = [-0.5, 0.5, 1.5]
                 norm = plt.cm.colors.BoundaryNorm(bounds, cmap.N)
             
-            im = self.ax.imshow(grid, cmap=cmap, norm=norm, interpolation='nearest')
+            self.ax.imshow(grid, cmap=cmap, norm=norm, interpolation='nearest')
             
             # 添加标签
             row_labels = [chr(ord('A') + i) for i in range(self.rows)]
@@ -765,6 +771,8 @@ class GeeseUI:
         if not image_path:
             self.log(f"错误：未找到图片文件，请将图片文件放入{self.watch_dir}文件夹")
             messagebox.showerror("错误", f"未找到图片文件，请将图片文件放入{self.watch_dir}文件夹")
+            # 恢复监控和自动发送状态
+            self._restore_monitoring_and_auto_send(was_monitoring, was_auto_send)
             return
         
         # 在单独的线程中运行标定，避免阻塞主UI
@@ -772,19 +780,20 @@ class GeeseUI:
             try:
                 # 导入并调用line_calibrate的cli_main函数
                 from line_calibrate import cli_main
-                template_path = "template.json"
+                template_path = self.get_template_path()
                 result = cli_main(image_path, template_path, self.rows, self.cols)
                 
                 # 检查标定是否成功
                 if result is not None:
                     # 标定完成后更新UI
-                    self.root.after(0, lambda: self.log("模板重绘完成，重新加载模板..."))
+                    self.root.after(0, lambda: self.log(f"模板重绘完成，重新加载模板 {template_path}..."))
                     
                     # 重新加载模板
-                    if os.path.exists("template.json"):
-                        self.root.after(0, lambda: self.processor.load_template())
+                    if os.path.exists(template_path):
+                        # 重新创建处理器以确保使用正确的模板文件
+                        self.root.after(0, lambda: self._reset_processor_with_template(template_path))
                         self.root.after(0, lambda: self.template_status_var.set("模板已重新加载"))
-                        self.root.after(0, lambda: self.log("模板已成功重新加载"))
+                        self.root.after(0, lambda: self.log(f"模板 {template_path} 已成功重新加载"))
                         self.root.after(0, lambda: self.log(f"新模板已应用，孔版布局: {self.rows}行 x {self.cols}列"))
                         self.root.after(0, lambda: messagebox.showinfo("成功", f"模板已重新加载\n孔版布局: {self.rows}行 x {self.cols}列"))
                         # 标定成功，保存配置
@@ -794,7 +803,7 @@ class GeeseUI:
                         self.root.after(0, lambda: self._restore_monitoring_and_auto_send(was_monitoring, was_auto_send))
                     else:
                         self.root.after(0, lambda: self.template_status_var.set("模板文件不存在"))
-                        self.root.after(0, lambda: self.log("错误：模板文件不存在"))
+                        self.root.after(0, lambda: self.log(f"错误：模板文件 {template_path} 不存在"))
                         self.root.after(0, lambda: messagebox.showerror("错误", "模板文件不存在，请重新运行标定程序"))
                         
                         # 恢复监控和自动发送状态
@@ -852,8 +861,9 @@ class GeeseUI:
         self.processor.rows = self.rows
         self.processor.cols = self.cols
         
-        # 重新生成标签
-        self.processor.labels = self.processor._generate_labels()
+        # 重新生成标签（检查方法是否存在）
+        if hasattr(self.processor, "_generate_labels"):
+            self.processor.labels = self.processor._generate_labels()
         
         self.log(f"已恢复原始孔版大小: {self.rows}行 x {self.cols}列")
     
@@ -895,9 +905,7 @@ class GeeseUI:
             self.log(f"监控文件夹已更改为: {self.watch_dir}")
             # 更新显示的监控文件夹路径
             self.monitor_dir_label.config(text=f"监控文件夹: {self.watch_dir}")
-            # 清空已处理文件列表，因为监控文件夹已更改
-            self.processed_files.clear()
-            # 保存配置到template.json
+            # 保存配置到config.json
             self.save_config()
             
             # 恢复监控和自动发送状态
@@ -941,8 +949,10 @@ class GeeseUI:
         
         while self.monitoring:
             try:
+                # 获取当前所有文件
+                all_files = set(os.listdir(self.watch_dir))
                 # 检查新文件
-                new_files = set(os.listdir(self.watch_dir)) - current_files
+                new_files = all_files - current_files
                 
                 for file_name in new_files:
                     file_path = os.path.join(self.watch_dir, file_name)
@@ -956,14 +966,11 @@ class GeeseUI:
                             file_name.lower().endswith('.jpeg') or file_name.lower().endswith('.bmp')):
                         continue
                     
-                    # 如果文件已经处理过，则跳过
-                    if file_name in self.processed_files:
-                        continue
-                    
                     self.log(f"检测到新图片: {file_name}")
                     self.process_image(file_path)
-                    # 更新当前文件列表，避免重复处理
-                    current_files.add(file_name)
+                
+                # 关键：更新current_files，避免重复处理
+                current_files = all_files
                 
                 time.sleep(1)  # 每秒检查一次
                 
@@ -986,95 +993,95 @@ class GeeseUI:
     
     def process_image(self, image_path):
         """处理图片：切割和识别二维码"""
-        try:
-            file_name = os.path.basename(image_path)
-            
-            # 检查文件是否可读
-            if not os.path.exists(image_path):
-                self.log(f"文件不存在: {image_path}")
-                return
-            
-            # 检查模板是否存在
-            if not os.path.exists("template.json"):
-                self.log("模板文件不存在，请先画模板")
-                messagebox.showwarning("警告", "模板文件不存在，请先点击'重新画模板'按钮")
-                return
-            
-            # 1. 切割图片
-            self.log("步骤1: 切割图片...")
+        # 使用互斥锁确保图片处理是串行的
+        with self.processing_lock:
             try:
-                # 确保cut_results目录存在
-                if not os.path.exists("cut_results"):
-                    os.makedirs("cut_results")
-                    self.log("创建cut_results目录")
-                else:
-                    # 清空cut_results目录，删除所有文件
-                    for file_name in os.listdir("cut_results"):
-                        file_path = os.path.join("cut_results", file_name)
-                        try:
-                            if os.path.isfile(file_path):
-                                os.remove(file_path)
-                        except Exception as e:
-                            self.log(f"删除文件 {file_name} 失败: {e}")
-                    self.log("已清空cut_results目录")
+                file_name = os.path.basename(image_path)
                 
-                # 获取切割结果
-                results = self.processor.cut_image(image_path)
-                if not results:
-                    self.log("切割失败，跳过二维码识别")
+                # 检查文件是否可读
+                if not os.path.exists(image_path):
+                    self.log(f"文件不存在: {image_path}")
                     return
                 
-                # 保存切割结果到cut_results目录
-                for label, roi in results:
-                    output_path = os.path.join("cut_results", f"{label}.png")
-                    cv2.imwrite(output_path, roi)
+                # 检查模板是否存在
+                template_file = self.get_template_path()
+                if not os.path.exists(template_file):
+                    self.log(f"模板文件 {template_file} 不存在，请先画模板")
+                    messagebox.showwarning("警告", f"模板文件 {template_file} 不存在，请先点击'重新画模板'按钮")
+                    return
                 
-                self.log(f"切割完成，共生成 {len(results)} 个子图片")
+                # 1. 切割图片
+                self.log("步骤1: 切割图片...")
+                try:
+                    # 确保cut_results目录存在
+                    if not os.path.exists("cut_results"):
+                        os.makedirs("cut_results")
+                        self.log("创建cut_results目录")
+                    else:
+                        # 清空cut_results目录，删除所有文件
+                        for old_name in os.listdir("cut_results"):
+                            old_path = os.path.join("cut_results", old_name)
+                            try:
+                                if os.path.isfile(old_path):
+                                    os.remove(old_path)
+                            except Exception as e:
+                                self.log(f"删除文件 {old_name} 失败: {e}")
+                        self.log("已清空cut_results目录")
+                    
+                    # 获取切割结果
+                    results = self.processor.cut_image(image_path)
+                    if not results:
+                        self.log("切割失败，跳过二维码识别")
+                        return
+                    
+                    # 保存切割结果到cut_results目录
+                    for label, roi in results:
+                        output_path = os.path.join("cut_results", f"{label}.png")
+                        cv2.imwrite(output_path, roi)
+                    
+                    self.log(f"切割完成，共生成 {len(results)} 个子图片")
+                except Exception as e:
+                    self.log(f"切割过程中出错: {e}")
+                    return
+                
+                # 2. 识别二维码
+                self.log("步骤2: 识别二维码...")
+                try:
+                    # 确保Result目录存在
+                    if not os.path.exists("Result"):
+                        os.makedirs("Result")
+                        self.log("创建Result目录")
+                    
+                    # 为每个图片创建唯一的输出文件
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    output_file = os.path.join("Result", f"qr_results_{timestamp}_{os.path.splitext(file_name)[0]}.json")
+                    
+                    # 调用QR模块的process_qr_codes函数
+                    qr_results = process_qr_codes("cut_results", output_file)
+                    self.log(f"二维码识别完成，共识别 {len(qr_results)} 个二维码")
+                    
+                    # 更新当前二维码结果
+                    self.qr_results = qr_results
+                    
+                    # 重置发送状态为"未发送"
+                    self.send_status_var.set("未发送")
+                    
+                    # 更新UI
+                    self.update_stats()
+                    self.update_map()
+                    self.update_visualization()
+                    
+                    # 检查是否需要自动发送
+                    self.check_and_send_auto()
+                    
+                except Exception as e:
+                    self.log(f"二维码识别过程中出错: {e}")
+                    return
+                
+                self.log(f"图片处理完成: {file_name}")
+                
             except Exception as e:
-                self.log(f"切割过程中出错: {e}")
-                return
-            
-            # 2. 识别二维码
-            self.log("步骤2: 识别二维码...")
-            try:
-                # 确保Result目录存在
-                if not os.path.exists("Result"):
-                    os.makedirs("Result")
-                    self.log("创建Result目录")
-                
-                # 为每个图片创建唯一的输出文件
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_file = os.path.join("Result", f"qr_results_{timestamp}_{os.path.splitext(file_name)[0]}.json")
-                
-                # 导入并调用QR模块的process_qr_codes函数
-                from QR import process_qr_codes
-                qr_results = process_qr_codes("cut_results", output_file)
-                self.log(f"二维码识别完成，共识别 {len(qr_results)} 个二维码")
-                
-                # 更新当前二维码结果
-                self.qr_results = qr_results
-                
-                # 重置发送状态为"未发送"
-                self.send_status_var.set("未发送")
-                
-                # 更新UI
-                self.update_stats()
-                self.update_map()
-                self.update_visualization()
-                
-                # 检查是否需要自动发送
-                self.check_and_send_auto()
-                
-            except Exception as e:
-                self.log(f"二维码识别过程中出错: {e}")
-                return
-            
-            # 标记为已处理
-            self.processed_files.add(file_name)
-            self.log(f"图片处理完成: {file_name}")
-            
-        except Exception as e:
-            self.log(f"处理图片时发生错误: {e}")
+                self.log(f"处理图片时发生错误: {e}")
     
     def apply_plate_size(self):
         """应用孔版大小设置"""
@@ -1103,23 +1110,45 @@ class GeeseUI:
             original_rows = self.rows
             original_cols = self.cols
             
-            # 临时更新行列数
+            # 更新当前行列数
             self.rows = new_rows
             self.cols = new_cols
             
-            # 更新处理器的行列数
-            self.processor.rows = self.rows
-            self.processor.cols = self.cols
+            # 更新UI显示
+            self.rows_var.set(self.rows)
+            self.cols_var.set(self.cols)
             
-            # 重新生成标签
-            self.processor.labels = self.processor._generate_labels()
+            # 计算新模板文件名
+            template_file = self.get_template_path()
             
-            self.log(f"正在尝试更新孔版大小: {self.rows}行 x {self.cols}列")
+            self.log(f"正在更新孔版大小: {self.rows}行 x {self.cols}列")
             
-            # 自动触发模板重绘，但不立即保存配置
-            self.recalibrate_template(original_rows, original_cols, self.monitoring, self.auto_send)
+            # 检查模板文件是否存在
+            if os.path.exists(template_file):
+                # 模板已存在，直接加载
+                self.log(f"检测到已存在模板 {template_file}，直接加载")
+                
+                # 使用新的方法重置处理器并同步行列数
+                self._reset_processor_with_template(template_file)
+                
+                # 保存配置
+                self.save_config()
+                
+                # 更新可视化
+                self.update_visualization()
+                
+                self.log(f"已成功切换到 {self.rows}x{self.cols} 模板")
+                messagebox.showinfo("成功", f"已成功切换到 {self.rows}x{self.cols} 模板")
+            else:
+                # 模板不存在，需要重新标定
+                self.log(f"未找到模板 {template_file}，需要重新标定")
+                
+                # 触发标定
+                self.recalibrate_template(original_rows, original_cols, self.monitoring, self.auto_send)
+                
         except Exception as e:
             self.log(f"应用孔版大小失败: {e}")
+            messagebox.showerror("错误", f"应用孔版大小失败: {e}")
     
     def on_close(self):
         """关闭窗口时的处理"""
@@ -1141,24 +1170,6 @@ class GeeseUI:
             self.log("Matplotlib资源已清理")
         except Exception as e:
             self.log(f"清理Matplotlib资源时出错: {e}")
-        
-        # 终止已知的子进程（仅限于self.subprocesses列表中的）
-        if self.subprocesses:
-            self.log(f"正在终止 {len(self.subprocesses)} 个子进程...")
-            for process in self.subprocesses:
-                try:
-                    if process.poll() is None:  # 检查进程是否仍在运行
-                        process.terminate()  # 尝试正常终止
-                        try:
-                            process.wait(timeout=3)  # 等待3秒
-                        except subprocess.TimeoutExpired:
-                            self.log("子进程未响应，强制终止...")
-                            process.kill()  # 强制终止
-                except Exception as e:
-                    self.log(f"终止子进程时出错: {e}")
-            
-            self.subprocesses.clear()
-            self.log("所有子进程已终止")
         
         # 手动调用清理函数（因为os._exit不会触发atexit注册的函数）
         try:
@@ -1183,6 +1194,8 @@ class GeeseUI:
                     photo = ImageTk.PhotoImage(icon_image)
                     # 设置窗口图标（跨平台方式）
                     self.root.iconphoto(True, photo)
+                    # 保持对PhotoImage的引用，防止被垃圾回收
+                    self._icon_photo = photo
                     self.log("已使用iconphoto设置窗口图标")
             except Exception as e:
                 self.log(f"使用iconphoto设置图标失败: {e}")
@@ -1200,7 +1213,6 @@ class GeeseUI:
             # 设置任务栏图标（Windows特定）
             try:
                 import ctypes
-                from ctypes import wintypes
                 
                 # 定义Windows API函数和常量
                 user32 = ctypes.windll.user32
@@ -1228,12 +1240,9 @@ class GeeseUI:
             except Exception as e:
                 self.log(f"设置任务栏图标失败: {e}")
                 
-            # 只有在log_text已初始化后才记录日志
-            if hasattr(self, 'log_text'):
-                self.log("窗口图标设置完成")
+            self.log("窗口图标设置完成")
         except Exception as e:
-            if hasattr(self, 'log_text'):
-                self.log(f"设置窗口图标失败: {e}")
+            self.log(f"设置窗口图标失败: {e}")
 
 if __name__ == "__main__":
     # 在创建Tk窗口之前设置AppUserModelID，确保任务栏图标正确显示

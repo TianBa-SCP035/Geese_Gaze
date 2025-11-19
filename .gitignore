@@ -10,4 +10,5 @@ Result/
 cut_results/
 qr_results.json
 picture/
-template.json
+template_*.json
+config.json
