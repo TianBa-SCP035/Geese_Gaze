@@ -71,8 +71,8 @@ Geese Gaze 监控系统
 
 2. 创建并激活虚拟环境
    ```bash
-   conda create -n DICK python=3.8
-   conda activate DICK
+   conda create -n DOGE python=3.8
+   conda activate DOGE
    ```
 
 3. 安装依赖

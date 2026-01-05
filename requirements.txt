@@ -8,6 +8,9 @@ pyzbar>=0.1.9
 zxing-cpp>=2.0.0
 qreader>=3.0.0
 
+# DM码识别
+pylibdmtx>=0.1.10
+
 # GUI和可视化
 matplotlib>=3.3.0
 

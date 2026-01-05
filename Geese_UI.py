@@ -19,6 +19,7 @@ import string
 # 导入我们的模块
 from cut import TubePlateProcessor
 from QR import process_qr_codes
+from DM import process_dm_codes
 
 # 资源路径处理函数
 if getattr(sys, 'frozen', False):
@@ -43,7 +44,7 @@ class GeeseUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Geese Gaze 监控系统")
-        self.root.geometry("1200x900")
+        self.root.geometry("1010x900")
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # 初始化变量
@@ -53,6 +54,7 @@ class GeeseUI:
         self.server_url = "http://172.16.1.141:10511/apiEntitySample/GetSampleScanData.json"  # 默认后端接口地址
         self.watch_dir = "picture"  # 默认监控文件夹路径
         self.processing_lock = threading.Lock()  # 图片处理互斥锁
+        self.code_mode = "DM"  # 识别模式：QR或DM
         
         # 孔版行列数
         self.rows = 9
@@ -180,6 +182,10 @@ class GeeseUI:
         # 应用按钮
         apply_button = ttk.Button(size_inner_frame, text="应用", command=self.apply_plate_size)
         apply_button.grid(row=0, column=4, padx=5, pady=2)
+        
+        # QR/DM切换按钮
+        self.code_mode_btn = ttk.Button(size_inner_frame, text="DM码", command=self.toggle_code_mode)
+        self.code_mode_btn.grid(row=0, column=5, padx=5, pady=2)
         
         # 统计信息区域
         stats_frame = ttk.LabelFrame(left_frame, text="统计信息", padding="10")
@@ -548,6 +554,17 @@ class GeeseUI:
         else:
             self.auto_send_btn.config(text="启用自动发送")
             self.log("自动发送已禁用")
+    
+    def toggle_code_mode(self):
+        """切换QR/DM识别模式"""
+        if self.code_mode == "QR":
+            self.code_mode = "DM"
+            self.code_mode_btn.config(text="DM码")
+            self.log("已切换到DM码识别模式")
+        else:
+            self.code_mode = "QR"
+            self.code_mode_btn.config(text="QR码")
+            self.log("已切换到QR码识别模式")
     
     def generate_data_id(self):
         """生成15位随机数字作为data_id"""
@@ -1056,9 +1073,13 @@ class GeeseUI:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     output_file = os.path.join("Result", f"qr_results_{timestamp}_{os.path.splitext(file_name)[0]}.json")
                     
-                    # 调用QR模块的process_qr_codes函数
-                    qr_results = process_qr_codes("cut_results", output_file)
-                    self.log(f"二维码识别完成，共识别 {len(qr_results)} 个二维码")
+                    # 根据当前模式调用对应的识别函数
+                    if self.code_mode == "QR":
+                        qr_results = process_qr_codes("cut_results", output_file)
+                        self.log(f"二维码识别完成，共识别 {len(qr_results)} 个二维码")
+                    else:
+                        qr_results = process_dm_codes("cut_results", output_file)
+                        self.log(f"DM码识别完成，共识别 {len(qr_results)} 个DM码")
                     
                     # 更新当前二维码结果
                     self.qr_results = qr_results

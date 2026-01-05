@@ -1,3 +1,3 @@
 @echo off
-call conda activate DICK
+call conda activate DOGE
 python mock_server.py
