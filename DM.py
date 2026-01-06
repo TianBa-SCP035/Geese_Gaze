@@ -25,13 +25,13 @@ def _decode_with_backoffs(img):
     dmtx_results = dmtx_decode(img, timeout=500, max_count=1)
     if dmtx_results:
         best_result = max(dmtx_results, key=lambda r: len(r.data))
-        return "M1-pylibdmtx", best_result.data.decode("utf-8", errors="ignore")
+        return "M1-pylibdmtx", best_result.data.decode("utf-8", errors="strict")
     
     # 2倍放大图识别DM码
     dmtx_results = dmtx_decode(img2x, timeout=500, max_count=1)
     if dmtx_results:
         best_result = max(dmtx_results, key=lambda r: len(r.data))
-        return "M1-pylibdmtx-2x", best_result.data.decode("utf-8", errors="ignore")
+        return "M1-pylibdmtx-2x", best_result.data.decode("utf-8", errors="strict")
     
     # 模式二：ZXing识别（后备方案）
     results = zxingcpp.read_barcodes(img)
