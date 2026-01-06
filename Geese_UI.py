@@ -44,7 +44,7 @@ class GeeseUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Geese Gaze 监控系统")
-        self.root.geometry("1010x900")
+        self.root.geometry("1100x900")
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # 初始化变量
@@ -103,13 +103,17 @@ class GeeseUI:
         
     def create_widgets(self):
         """创建UI组件"""
-        # 创建顶部控制面板
-        control_frame = ttk.Frame(self.root, padding="10")
-        control_frame.pack(fill=tk.X)
+        # 创建主内容区域（左右两列）
+        main_content = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        main_content.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # 左侧：模板控制、日志、孔版大小、统计信息
+        left_frame = ttk.Frame(main_content)
+        main_content.add(left_frame, weight=1)
         
         # 模板相关按钮
-        template_frame = ttk.LabelFrame(control_frame, text="模板控制", padding="10")
-        template_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        template_frame = ttk.LabelFrame(left_frame, text="模板控制", padding="10")
+        template_frame.pack(fill=tk.X, pady=5)
         
         self.template_status_var = tk.StringVar(value="检查模板中...")
         ttk.Label(template_frame, textvariable=self.template_status_var).pack(side=tk.LEFT, padx=5)
@@ -129,33 +133,6 @@ class GeeseUI:
         self.machine_code_btn = ttk.Button(template_frame, text="机器码", command=self.change_machine_code)
         self.machine_code_btn.pack(side=tk.LEFT, padx=5)
         
-        # 监控控制按钮
-        monitor_frame = ttk.LabelFrame(control_frame, text="监控控制", padding="10")
-        monitor_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        
-        self.monitor_btn = ttk.Button(monitor_frame, text="停止监控", command=self.toggle_monitoring)
-        self.monitor_btn.pack(side=tk.LEFT, padx=5)
-        
-        # 重新选择监控文件夹按钮
-        self.select_dir_btn = ttk.Button(monitor_frame, text="选择监控文件夹", command=self.select_monitor_directory)
-        self.select_dir_btn.pack(side=tk.LEFT, padx=5)
-        
-        # 自动发送按钮
-        self.auto_send_btn = ttk.Button(monitor_frame, text="禁用自动发送", command=self.toggle_auto_send)
-        self.auto_send_btn.pack(side=tk.LEFT, padx=5)
-        
-        # 显示当前监控文件夹路径
-        self.monitor_dir_label = ttk.Label(monitor_frame, text=f"监控文件夹: {self.watch_dir}")
-        self.monitor_dir_label.pack(side=tk.LEFT, padx=5)
-        
-        # 创建主内容区域
-        main_content = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        main_content.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        # 左侧：日志和统计信息
-        left_frame = ttk.Frame(main_content)
-        main_content.add(left_frame, weight=1)
-        
         # 日志区域
         log_frame = ttk.LabelFrame(left_frame, text="执行日志", padding="10")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -163,7 +140,7 @@ class GeeseUI:
         self.log_text = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, height=18)
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
-        # 孔版大小选择（移动到统计信息上方）
+        # 孔版大小选择
         size_frame = ttk.LabelFrame(left_frame, text="孔版大小", padding="10")
         size_frame.pack(fill=tk.X, pady=5)
         
@@ -207,9 +184,28 @@ class GeeseUI:
         self.stats_text = scrolledtext.ScrolledText(stats_frame, wrap=tk.WORD, height=18)
         self.stats_text.pack(fill=tk.BOTH, expand=True)
         
-        # 右侧：二维码映射和可视化
+        # 右侧：监控控制、二维码映射、可视化
         right_frame = ttk.Frame(main_content)
         main_content.add(right_frame, weight=1)
+        
+        # 监控控制按钮
+        monitor_frame = ttk.LabelFrame(right_frame, text="监控控制", padding="10")
+        monitor_frame.pack(fill=tk.X, pady=5)
+        
+        self.monitor_btn = ttk.Button(monitor_frame, text="停止监控", command=self.toggle_monitoring)
+        self.monitor_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 重新选择监控文件夹按钮
+        self.select_dir_btn = ttk.Button(monitor_frame, text="选择监控文件夹", command=self.select_monitor_directory)
+        self.select_dir_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 自动发送按钮
+        self.auto_send_btn = ttk.Button(monitor_frame, text="禁用自动发送", command=self.toggle_auto_send)
+        self.auto_send_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 显示当前监控文件夹路径
+        self.monitor_dir_label = ttk.Label(monitor_frame, text=f"监控文件夹: {self.watch_dir}")
+        self.monitor_dir_label.pack(side=tk.LEFT, padx=5)
         
         # 二维码映射区域
         map_frame = ttk.LabelFrame(right_frame, text="二维码映射", padding="10")
