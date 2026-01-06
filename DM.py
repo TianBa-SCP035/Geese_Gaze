@@ -22,13 +22,13 @@ def _decode_with_backoffs(img):
     img2x = cv2.resize(img, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_NEAREST)
     
     # 模式一：pylibdmtx专门识别DM码（优先使用）
-    dmtx_results = dmtx_decode(img)
+    dmtx_results = dmtx_decode(img, timeout=500, max_count=1)
     if dmtx_results:
         best_result = max(dmtx_results, key=lambda r: len(r.data))
         return "M1-pylibdmtx", best_result.data.decode("utf-8", errors="ignore")
     
     # 2倍放大图识别DM码
-    dmtx_results = dmtx_decode(img2x)
+    dmtx_results = dmtx_decode(img2x, timeout=500, max_count=1)
     if dmtx_results:
         best_result = max(dmtx_results, key=lambda r: len(r.data))
         return "M1-pylibdmtx-2x", best_result.data.decode("utf-8", errors="ignore")

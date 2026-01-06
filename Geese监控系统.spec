@@ -20,80 +20,41 @@ a = Analysis(
         ('D:\\Conda\\envs\\DOGE\\Lib\\site-packages\\qrdet\\.model\\current_release.txt', 'qrdet\\.model'),
     ],
     hiddenimports=[
-        # 基础库
-        'os',
-        'sys',
-        'json',
-        'threading',
-        'time',
-        'datetime',
-        'subprocess',
-        'psutil',
-        
-        # GUI相关
+        # GUI相关 (PyInstaller有时无法正确检测)
         'tkinter',
         'tkinter.ttk',
         'tkinter.messagebox',
         'tkinter.filedialog',
         'tkinter.scrolledtext',
         
-        # 数据处理
-        'numpy',
-        
-        # 图像处理
-        'cv2',
-        'PIL',
-        'PIL.Image',
-        'PIL.ImageTk',
-        
-        # 图表
+        # 图表相关 (PyInstaller有时无法正确检测)
         'matplotlib',
         'matplotlib.pyplot',
         'matplotlib.backends.backend_tkagg',
         
-        # 网络请求
-        'requests',
-        
-        # QR码相关
+        # QR码识别
         'pyzbar',
         'pyzbar.pyzbar',
         'zxingcpp',
         'qreader',
-        'qrdet',
-        'qrdet._qrdet_helpers',
-        'quadrilateral_fitter',
-        'shapely',
-        'shapely.geometry',
-        'shapely.ops',
-        'ultralytics',
         
-        # DM码相关
+        # DM码识别
         'pylibdmtx',
         'pylibdmtx.pylibdmtx',
-        
-        # PyTorch相关 (ultralytics依赖)
-        'torch',
-        'torchvision',
-        
-        # 文件监控
-        'watchdog',
-        'watchdog.observers',
-        'watchdog.events',
-        
-        # Web服务器
-        'flask',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['runtime_hook.py'],
     excludes=[
-        # 排除不需要的大型库
-        'sklearn',
-        'sklearn.*',
+        # 排除已安装但项目不使用的大型库
         'tensorflow',
         'tensorflow.*',
+        'sklearn',
+        'sklearn.*',
         'theano',
         'theano.*',
+        
+        # 排除开发工具（不应该被打包）
         'jupyter',
         'jupyter.*',
         'notebook',
@@ -102,8 +63,6 @@ a = Analysis(
         'ipython.*',
         'spyder',
         'spyder.*',
-        'pycharm',
-        'pycharm.*',
         'pytest',
         'pytest.*',
         'django',

@@ -17,12 +17,13 @@ matplotlib>=3.3.0
 # 网络请求
 requests>=2.25.0
 
-# 系统监控
-psutil>=5.8.0
+# 机器学习模型 (qrdet依赖)
+ultralytics>=8.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# 科学计算 (ultralytics依赖)
+scipy>=1.5.0
 
 # PyInstaller相关（用于打包）
 pyinstaller>=4.5.0
-
-# 其他工具
-scipy>=1.6.0
-pandas>=1.2.0

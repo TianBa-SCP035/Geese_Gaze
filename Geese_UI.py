@@ -61,14 +61,17 @@ class GeeseUI:
         self.cols = 9
         self.machine_code = 1
         
+        # 图标引用（防止被垃圾回收）
+        self._icon_photo = None
+        
+        # 设置窗口图标（在创建UI组件之前设置，确保图标稳定显示）
+        self.set_window_icon()
+        
         # 初始化处理器为None，稍后创建
         self.processor = None
         
         # 创建UI组件（包含log_text）
         self.create_widgets()
-        
-        # 设置窗口图标（现在可以安全使用self.log）
-        self.set_window_icon()
         
         # 加载配置
         self.load_config()
@@ -488,12 +491,20 @@ class GeeseUI:
             self.log(f"警告：模板文件 {template_file} 不存在，请先点击'重新画模板'按钮")
     
     def log(self, message):
-        """添加日志消息"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_message = f"[{timestamp}] {message}\n"
-        self.log_text.insert(tk.END, log_message)
-        self.log_text.see(tk.END)
-        self.root.update_idletasks()
+        """添加日志消息（线程安全）"""
+        def _update_log():
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_message = f"[{timestamp}] {message}\n"
+            self.log_text.insert(tk.END, log_message)
+            self.log_text.see(tk.END)
+            self.root.update_idletasks()
+        
+        # 检查是否在主线程中
+        if threading.current_thread() == threading.main_thread():
+            _update_log()
+        else:
+            # 在子线程中，使用after调度到主线程执行
+            self.root.after(0, _update_log)
     
     def update_stats(self):
         """更新统计信息"""
@@ -984,7 +995,10 @@ class GeeseUI:
                         continue
                     
                     self.log(f"检测到新图片: {file_name}")
-                    self.process_image(file_path)
+                    # 在单独的线程中处理图片，避免阻塞监控线程
+                    process_thread = threading.Thread(target=self.process_image, args=(file_path,))
+                    process_thread.daemon = True
+                    process_thread.start()
                 
                 # 关键：更新current_files，避免重复处理
                 current_files = all_files
@@ -1006,7 +1020,10 @@ class GeeseUI:
             return
         
         self.log(f"处理单张图片: {file_path}")
-        self.process_image(file_path)
+        # 在单独的线程中处理图片，避免阻塞主线程
+        process_thread = threading.Thread(target=self.process_image, args=(file_path,))
+        process_thread.daemon = True
+        process_thread.start()
     
     def process_image(self, image_path):
         """处理图片：切割和识别二维码"""
@@ -1024,7 +1041,8 @@ class GeeseUI:
                 template_file = self.get_template_path()
                 if not os.path.exists(template_file):
                     self.log(f"模板文件 {template_file} 不存在，请先画模板")
-                    messagebox.showwarning("警告", f"模板文件 {template_file} 不存在，请先点击'重新画模板'按钮")
+                    # 在主线程中显示警告对话框
+                    self.root.after(0, lambda: messagebox.showwarning("警告", f"模板文件 {template_file} 不存在，请先点击'重新画模板'按钮"))
                     return
                 
                 # 1. 切割图片
@@ -1087,13 +1105,13 @@ class GeeseUI:
                     # 重置发送状态为"未发送"
                     self.send_status_var.set("未发送")
                     
-                    # 更新UI
-                    self.update_stats()
-                    self.update_map()
-                    self.update_visualization()
+                    # 更新UI（使用after调度到主线程执行）
+                    self.root.after(0, self.update_stats)
+                    self.root.after(0, self.update_map)
+                    self.root.after(0, lambda: self.update_visualization())
                     
                     # 检查是否需要自动发送
-                    self.check_and_send_auto()
+                    self.root.after(0, self.check_and_send_auto)
                     
                 except Exception as e:
                     self.log(f"二维码识别过程中出错: {e}")
@@ -1206,64 +1224,27 @@ class GeeseUI:
     def set_window_icon(self):
         """设置窗口图标和任务栏图标"""
         try:
-            # 首选：跨平台方式使用iconphoto
+            # 使用iconbitmap设置窗口图标（Windows原生方式）
+            # 这会同时设置窗口左上角图标和任务栏图标
             try:
                 icon_path = get_resource_path("geese32.ico")
                 if os.path.exists(icon_path):
-                    # 使用PIL加载图标
-                    icon_image = Image.open(icon_path)
-                    photo = ImageTk.PhotoImage(icon_image)
-                    # 设置窗口图标（跨平台方式）
-                    self.root.iconphoto(True, photo)
-                    # 保持对PhotoImage的引用，防止被垃圾回收
-                    self._icon_photo = photo
-                    self.log("已使用iconphoto设置窗口图标")
-            except Exception as e:
-                self.log(f"使用iconphoto设置图标失败: {e}")
-            
-            # 兼容Windows老版本方式
-            try:
-                icon_path = get_resource_path("Geese.ico")
-                if os.path.exists(icon_path):
-                    # 使用iconbitmap设置图标（Windows兼容方式）
                     self.root.iconbitmap(default=icon_path)
-                    self.log("已使用iconbitmap设置窗口图标")
+                    # 检查log_text是否已创建
+                    if hasattr(self, 'log_text') and self.log_text:
+                        self.log("已使用iconbitmap设置窗口图标（geese32.ico）")
             except Exception as e:
-                self.log(f"使用iconbitmap设置图标失败: {e}")
+                # 检查log_text是否已创建
+                if hasattr(self, 'log_text') and self.log_text:
+                    self.log(f"使用iconbitmap设置图标失败: {e}")
                 
-            # 设置任务栏图标（Windows特定）
-            try:
-                import ctypes
-                
-                # 定义Windows API函数和常量
-                user32 = ctypes.windll.user32
-                
-                # 获取窗口句柄
-                hwnd = self.root.winfo_id()
-                
-                # 加载图标
-                icon_path = get_resource_path("Geese.ico")
-                if os.path.exists(icon_path):
-                    h_icon = user32.LoadImageW(
-                        None, 
-                        icon_path, 
-                        1,  # IMAGE_ICON
-                        0,  # 使用默认宽度
-                        0,  # 使用默认高度
-                        0x00000010 | 0x00000020  # LR_LOADFROMFILE | LR_DEFAULTSIZE
-                    )
-                    
-                    if h_icon:
-                        # 设置窗口图标
-                        user32.SendMessageW(hwnd, 0x0080, 0, h_icon)  # WM_SETICON = 0x0080
-                        user32.SendMessageW(hwnd, 0x0080, 1, h_icon)  # ICON_BIG = 1
-                        self.log("已设置任务栏图标")
-            except Exception as e:
-                self.log(f"设置任务栏图标失败: {e}")
-                
-            self.log("窗口图标设置完成")
+            # 检查log_text是否已创建
+            if hasattr(self, 'log_text') and self.log_text:
+                self.log("窗口图标设置完成")
         except Exception as e:
-            self.log(f"设置窗口图标失败: {e}")
+            # 检查log_text是否已创建
+            if hasattr(self, 'log_text') and self.log_text:
+                self.log(f"设置窗口图标失败: {e}")
 
 if __name__ == "__main__":
     # 在创建Tk窗口之前设置AppUserModelID，确保任务栏图标正确显示
