@@ -44,7 +44,8 @@ class GeeseUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Geese Gaze 监控系统")
-        self.root.geometry("1100x900")
+        #self.root.minsize(1350, 1080)
+        self.root.maxsize(1700, 4000)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # 初始化变量
@@ -103,17 +104,17 @@ class GeeseUI:
         
     def create_widgets(self):
         """创建UI组件"""
-        # 创建主内容区域（左右两列）
-        main_content = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        main_content.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # 创建主垂直PanedWindow（三行）
+        main_paned = ttk.PanedWindow(self.root, orient=tk.VERTICAL)
+        main_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # 左侧：模板控制、日志、孔版大小、统计信息
-        left_frame = ttk.Frame(main_content)
-        main_content.add(left_frame, weight=1)
+        # 第一行：模板控制（左）+ 监控控制（右）
+        row1 = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
+        main_paned.add(row1, weight=0)
         
-        # 模板相关按钮
-        template_frame = ttk.LabelFrame(left_frame, text="模板控制", padding="10")
-        template_frame.pack(fill=tk.X, pady=5)
+        # 第一行左侧：模板控制
+        template_frame = ttk.LabelFrame(row1, text="模板控制", padding="10")
+        row1.add(template_frame, weight=1)
         
         self.template_status_var = tk.StringVar(value="检查模板中...")
         ttk.Label(template_frame, textvariable=self.template_status_var).pack(side=tk.LEFT, padx=5)
@@ -133,16 +134,54 @@ class GeeseUI:
         self.machine_code_btn = ttk.Button(template_frame, text="机器码", command=self.change_machine_code)
         self.machine_code_btn.pack(side=tk.LEFT, padx=5)
         
-        # 日志区域
-        log_frame = ttk.LabelFrame(left_frame, text="执行日志", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        # 第一行右侧：监控控制
+        monitor_frame = ttk.LabelFrame(row1, text="监控控制", padding="10")
+        row1.add(monitor_frame, weight=1)
+        
+        self.monitor_btn = ttk.Button(monitor_frame, text="停止监控", command=self.toggle_monitoring)
+        self.monitor_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 重新选择监控文件夹按钮
+        self.select_dir_btn = ttk.Button(monitor_frame, text="选择监控文件夹", command=self.select_monitor_directory)
+        self.select_dir_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 自动发送按钮
+        self.auto_send_btn = ttk.Button(monitor_frame, text="禁用自动发送", command=self.toggle_auto_send)
+        self.auto_send_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 显示当前监控文件夹路径
+        self.monitor_dir_label = ttk.Label(monitor_frame, text=f"监控文件夹: {self.watch_dir}")
+        self.monitor_dir_label.pack(side=tk.LEFT, padx=5)
+        
+        # 第二行：执行日志（左）+ 二维码映射（右）
+        row2 = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
+        main_paned.add(row2, weight=3)
+        
+        # 第二行左侧：日志区域
+        log_frame = ttk.LabelFrame(row2, text="执行日志", padding="10")
+        row2.add(log_frame, weight=1)
         
         self.log_text = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, height=18)
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
+        # 第二行右侧：二维码映射区域
+        map_frame = ttk.LabelFrame(row2, text="二维码映射", padding="10")
+        row2.add(map_frame, weight=1)
+        
+        self.map_text = scrolledtext.ScrolledText(map_frame, wrap=tk.WORD, height=18)
+        self.map_text.pack(fill=tk.BOTH, expand=True)
+        
+        # 第三行：孔版大小+统计信息（左）+ 可视化（右）
+        row3 = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
+        main_paned.add(row3, weight=2)
+        
+        # 第三行左侧：孔版大小和统计信息
+        left_bottom = ttk.PanedWindow(row3, orient=tk.VERTICAL)
+        row3.add(left_bottom, weight=1)
+        
         # 孔版大小选择
-        size_frame = ttk.LabelFrame(left_frame, text="孔版大小", padding="10")
-        size_frame.pack(fill=tk.X, pady=5)
+        size_frame = ttk.LabelFrame(left_bottom, text="孔版大小", padding="10")
+        left_bottom.add(size_frame, weight=0)
         
         # 行数选择
         size_inner_frame = ttk.Frame(size_frame)
@@ -168,8 +207,8 @@ class GeeseUI:
         self.code_mode_btn.grid(row=0, column=5, padx=5, pady=2)
         
         # 统计信息区域
-        stats_frame = ttk.LabelFrame(left_frame, text="统计信息", padding="10")
-        stats_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        stats_frame = ttk.LabelFrame(left_bottom, text="统计信息", padding="10")
+        left_bottom.add(stats_frame, weight=1)
         
         # 添加手动发送按钮
         send_frame = ttk.Frame(stats_frame)
@@ -184,44 +223,21 @@ class GeeseUI:
         self.stats_text = scrolledtext.ScrolledText(stats_frame, wrap=tk.WORD, height=18)
         self.stats_text.pack(fill=tk.BOTH, expand=True)
         
-        # 右侧：监控控制、二维码映射、可视化
-        right_frame = ttk.Frame(main_content)
-        main_content.add(right_frame, weight=1)
-        
-        # 监控控制按钮
-        monitor_frame = ttk.LabelFrame(right_frame, text="监控控制", padding="10")
-        monitor_frame.pack(fill=tk.X, pady=5)
-        
-        self.monitor_btn = ttk.Button(monitor_frame, text="停止监控", command=self.toggle_monitoring)
-        self.monitor_btn.pack(side=tk.LEFT, padx=5)
-        
-        # 重新选择监控文件夹按钮
-        self.select_dir_btn = ttk.Button(monitor_frame, text="选择监控文件夹", command=self.select_monitor_directory)
-        self.select_dir_btn.pack(side=tk.LEFT, padx=5)
-        
-        # 自动发送按钮
-        self.auto_send_btn = ttk.Button(monitor_frame, text="禁用自动发送", command=self.toggle_auto_send)
-        self.auto_send_btn.pack(side=tk.LEFT, padx=5)
-        
-        # 显示当前监控文件夹路径
-        self.monitor_dir_label = ttk.Label(monitor_frame, text=f"监控文件夹: {self.watch_dir}")
-        self.monitor_dir_label.pack(side=tk.LEFT, padx=5)
-        
-        # 二维码映射区域
-        map_frame = ttk.LabelFrame(right_frame, text="二维码映射", padding="10")
-        map_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        self.map_text = scrolledtext.ScrolledText(map_frame, wrap=tk.WORD, height=18)
-        self.map_text.pack(fill=tk.BOTH, expand=True)
-        
-        # 可视化区域
-        viz_frame = ttk.LabelFrame(right_frame, text="结果可视化", padding="10")
-        viz_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        # 第三行右侧：可视化区域
+        viz_frame = ttk.LabelFrame(row3, text="结果可视化", padding="10")
+        row3.add(viz_frame, weight=1)
         
         # 创建matplotlib图形
         self.fig, self.ax = plt.subplots(figsize=(3.6, 3.6), dpi=100)
         self.canvas = FigureCanvasTkAgg(self.fig, master=viz_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # 等待窗口完全渲染后，设置每一行左右平分
+        self.root.update()
+        
+        row1.sashpos(0, row1.winfo_width() // 2)
+        row2.sashpos(0, row2.winfo_width() // 2)
+        row3.sashpos(0, row3.winfo_width() // 2)
         
         # 状态栏
         self.status_var = tk.StringVar(value="监控运行中...")
@@ -1021,6 +1037,41 @@ class GeeseUI:
         process_thread.daemon = True
         process_thread.start()
     
+    def cleanup_old_files(self, directory, max_files=100):
+        """清理目录中的旧文件，只保留最近的max_files个文件
+        
+        Args:
+            directory: 要清理的目录路径
+            max_files: 保留的文件数量，默认100
+        """
+        if not os.path.exists(directory):
+            return
+            
+        try:
+            files = []
+            for file_name in os.listdir(directory):
+                file_path = os.path.join(directory, file_name)
+                try:
+                    if os.path.isfile(file_path):
+                        mtime = os.path.getmtime(file_path)
+                        files.append((file_path, mtime))
+                except Exception:
+                    pass
+            
+            files.sort(key=lambda x: x[1], reverse=True)
+            
+            if len(files) > max_files:
+                files_to_delete = files[max_files:]
+                for file_path, _ in files_to_delete:
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    except Exception:
+                        pass
+                    
+        except Exception:
+            pass
+
     def process_image(self, image_path):
         """处理图片：切割和识别二维码"""
         # 使用互斥锁确保图片处理是串行的
@@ -1044,6 +1095,10 @@ class GeeseUI:
                 # 1. 切割图片
                 self.log("步骤1: 切割图片...")
                 try:
+                    # 清理Result和picture文件夹，只保留最近的100个文件
+                    self.cleanup_old_files("Result", max_files=100)
+                    self.cleanup_old_files(self.watch_dir, max_files=100)
+                    
                     # 确保cut_results目录存在
                     if not os.path.exists("cut_results"):
                         os.makedirs("cut_results")
