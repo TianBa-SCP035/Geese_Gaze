@@ -24,7 +24,12 @@ Geese Gaze 监控系统是一个专为实验室环境设计的自动化扫码处
 
 ## 📸 快速测试
 
-![应用界面](应用视图.png) ![QR码测试图](QR码测试图.png)
+<table>
+  <tr>
+    <td><img src="应用视图.png" width="400"/></td>
+    <td><img src="QR码测试图.png" width="400"/></td>
+  </tr>
+</table>
 
 🎃详细步骤：应用启动大约1分钟，启动后同目录下生成picture文件夹，此测试图为9×9的QR码，切换到QR码模式，将图片拖入picture文件夹，按照弹出提示框完成区域标定，两条外边界线再按a即可自动划分，h键和v键切换横竖，s键保存，esc完成退出。点击处理单张图片，查看扫描结果，测试完成。
 
@@ -167,7 +172,7 @@ Geese Gaze 监控系统
 如有问题或建议，请通过以下方式联系：
 
 - 提交 Issue：[GitHub Issues](https://github.com/TianBa-SCP035/Geese_Gaze/issues)
-- 邮箱：[您的邮箱]
+- 邮箱：[不告诉你~嘻嘻]
 
 ---
 
