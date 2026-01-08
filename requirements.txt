@@ -25,5 +25,11 @@ torchvision>=0.15.0
 # 科学计算 (ultralytics依赖)
 scipy>=1.5.0
 
+# 模拟后端服务器
+flask>=2.0.0
+
+# 进程管理
+psutil>=5.8.0
+
 # PyInstaller相关（用于打包）
 pyinstaller>=4.5.0
