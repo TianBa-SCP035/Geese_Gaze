@@ -278,39 +278,59 @@ class GeeseUI:
                 # 加载机器码
                 self.machine_code = config.get('machine_code', 1)
                 
+                # 加载识别模式（QR或DM），默认为QR
+                self.code_mode = config.get('code_mode', 'QR')
+                
                 # 更新UI控件的值
                 self.rows_var.set(self.rows)
                 self.cols_var.set(self.cols)
                 
+                # 更新识别模式按钮文本
+                if self.code_mode == "QR":
+                    self.code_mode_btn.config(text="QR码")
+                else:
+                    self.code_mode_btn.config(text="DM码")
+                
                 self.log(f"孔版布局: {self.rows}行 x {self.cols}列")
                 self.log(f"机器码: {self.machine_code}")
+                self.log(f"识别模式: {self.code_mode}码")
             else:
                 # 使用默认配置
                 self.rows = 9
                 self.cols = 9
                 self.machine_code = 1
+                self.code_mode = "QR"
                 
                 # 更新UI控件的值
                 self.rows_var.set(self.rows)
                 self.cols_var.set(self.cols)
                 
+                # 更新识别模式按钮文本
+                self.code_mode_btn.config(text="QR码")
+                
                 self.log("使用默认配置")
                 self.log(f"孔版布局: {self.rows}行 x {self.cols}列")
                 self.log(f"机器码: {self.machine_code}")
+                self.log(f"识别模式: {self.code_mode}码")
         except Exception as e:
             self.log(f"加载配置失败: {e}")
             # 使用默认配置
             self.rows = 9
             self.cols = 9
             self.machine_code = 1
+            self.code_mode = "QR"
             
             # 更新UI控件的值
             self.rows_var.set(self.rows)
             self.cols_var.set(self.cols)
             
+            # 更新识别模式按钮文本
+            self.code_mode_btn.config(text="QR码")
+            
             self.log("使用默认配置")
             self.log(f"孔版布局: {self.rows}行 x {self.cols}列")
             self.log(f"机器码: {self.machine_code}")
+            self.log(f"识别模式: {self.code_mode}码")
     
     def save_config(self):
         """保存配置到config.json"""
@@ -327,6 +347,7 @@ class GeeseUI:
             config["rows"] = self.rows
             config["cols"] = self.cols
             config["machine_code"] = self.machine_code
+            config["code_mode"] = self.code_mode
             
             # 保存配置
             with open("config.json", "w") as f:
@@ -588,6 +609,9 @@ class GeeseUI:
             self.code_mode = "QR"
             self.code_mode_btn.config(text="QR码")
             self.log("已切换到QR码识别模式")
+        
+        # 保存配置
+        self.save_config()
     
     def generate_data_id(self):
         """生成15位随机数字作为data_id"""
@@ -1007,6 +1031,8 @@ class GeeseUI:
                         continue
                     
                     self.log(f"检测到新图片: {file_name}")
+                    # 等待0.5秒，确保文件完全传输完成
+                    time.sleep(0.5)
                     # 在单独的线程中处理图片，避免阻塞监控线程
                     process_thread = threading.Thread(target=self.process_image, args=(file_path,))
                     process_thread.daemon = True

@@ -7,17 +7,17 @@ a = Analysis(
     pathex=[],
     binaries=[
         # 添加pyzbar需要的DLL文件
-        ('D:\\Conda\\envs\\DOGE\\Lib\\site-packages\\pyzbar\\libzbar-64.dll', '.'),
-        ('D:\\Conda\\envs\\DOGE\\Lib\\site-packages\\pyzbar\\libiconv.dll', '.'),
+        ('D:\\Anaconda\\envs\\DOGE\\lib\\site-packages\\pyzbar\\libzbar-64.dll', '.'),
+        ('D:\\Anaconda\\envs\\DOGE\\lib\\site-packages\\pyzbar\\libiconv.dll', '.'),
         # 添加pylibdmtx需要的DLL文件
-        ('C:\\Users\\admin\\AppData\\Roaming\\Python\\Python310\\site-packages\\pylibdmtx\\libdmtx-64.dll', 'pylibdmtx'),
+        ('D:\\Anaconda\\envs\\DOGE\\lib\\site-packages\\pylibdmtx\\libdmtx-64.dll', 'pylibdmtx'),
     ],
     datas=[
         ('Geese.ico', '.'),  # 包含图标文件
         ('geese32.ico', '.'),  # 包含32x32小图标文件
         # 添加qrdet模型文件
-        ('D:\\Conda\\envs\\DOGE\\Lib\\site-packages\\qrdet\\.model\\qrdet-s.pt', 'qrdet\\.model'),
-        ('D:\\Conda\\envs\\DOGE\\Lib\\site-packages\\qrdet\\.model\\current_release.txt', 'qrdet\\.model'),
+        ('D:\\Anaconda\\envs\\DOGE\\lib\\site-packages\\qrdet\\.model\\qrdet-s.pt', 'qrdet\\.model'),
+        ('D:\\Anaconda\\envs\\DOGE\\lib\\site-packages\\qrdet\\.model\\current_release.txt', 'qrdet\\.model'),
     ],
     hiddenimports=[
         # GUI相关 (PyInstaller有时无法正确检测)
