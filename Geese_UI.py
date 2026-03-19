@@ -62,6 +62,9 @@ class GeeseUI:
         self.cols = 9
         self.machine_code = 1
         
+        # 当前选中的孔位（用于手动输入）
+        self.selected_position = None
+        
         # 图标引用（防止被垃圾回收）
         self._icon_photo = None
         
@@ -231,6 +234,12 @@ class GeeseUI:
         self.fig, self.ax = plt.subplots(figsize=(3.6, 3.6), dpi=100)
         self.canvas = FigureCanvasTkAgg(self.fig, master=viz_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # 绑定鼠标点击事件到可视化区域
+        self.canvas.mpl_connect('button_press_event', self.on_visualization_click)
+        
+        # 绑定键盘事件到主窗口
+        self.root.bind('<Key>', self.on_key_press)
         
         # 等待窗口完全渲染后，设置每一行左右平分
         self.root.update()
@@ -632,13 +641,20 @@ class GeeseUI:
             data_id = self.generate_data_id()
             
             # 准备发送的数据
+            # 生成所有孔位的位置标签
+            all_results = {}
+            for row in range(self.rows):
+                for col in range(self.cols):
+                    pos_label = f"{chr(ord('A') + row)}{col + 1}"
+                    all_results[pos_label] = self.qr_results.get(pos_label, "")
+            
             data = {
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "total_positions": total_positions,
                 "detected_count": len(self.qr_results),
                 "data_id": data_id,
                 "machine_id": self.machine_code,
-                "results": self.qr_results
+                "results": all_results
             }
             
             # 发送POST请求
@@ -662,12 +678,12 @@ class GeeseUI:
                             self.log(f"结果发送成功，数据ID验证一致: {returned_data_id}")
                             self.send_status_var.set("发送成功")
                         
-                        # 提取后端返回的negative和loc_err字段
-                        negative_positions = result.get('negative', [])
+                        # 提取后端返回的warning和loc_err字段
+                        warning_positions = result.get('warning', [])
                         loc_err_positions = result.get('loc_err', [])
                         
-                        # 更新可视化，显示negative和loc_err区域
-                        self.update_visualization(negative_positions, loc_err_positions)
+                        # 更新可视化，显示warning和loc_err区域
+                        self.update_visualization(warning_positions, loc_err_positions)
                     else:
                         # data_id不一致，提示数据返回错误
                         self.log(f"数据返回错误：发送的data_id({data_id})与返回的data_id({returned_data_id})不一致")
@@ -705,7 +721,7 @@ class GeeseUI:
         """更新二维码映射"""
         self.map_text.delete(1.0, tk.END)
         
-        if not self.qr_results:
+        if not self.qr_results and self.selected_position is None:
             self.map_text.insert(tk.END, "暂无二维码识别结果\n")
             return
         
@@ -716,21 +732,36 @@ class GeeseUI:
             number = int(pos[1:])
             return (letter, number)
         
+        # 如果有选中的孔位，显示在顶部
+        if self.selected_position is not None:
+            current_value = self.qr_results.get(self.selected_position, "")
+            # 检查位置序号的数字部分是否为个位数
+            if len(self.selected_position) == 2:  # 如A1、B2等
+                self.map_text.insert(tk.END, f"【{self.selected_position} : {current_value}】\n", "selected")
+            else:  # 如A11、B12等
+                self.map_text.insert(tk.END, f"【{self.selected_position}: {current_value}】\n", "selected")
+            self.map_text.insert(tk.END, "-" * 30 + "\n")
+        
         # 按位置排序显示
         sorted_positions = sorted(self.qr_results.keys(), key=sort_key)
         for pos in sorted_positions:
             value = self.qr_results[pos]
+            if not value:
+                continue
             # 检查位置序号的数字部分是否为个位数
             if len(pos) == 2:  # 如A1、B2等
-                self.map_text.insert(tk.END, f"{pos} : {value}\n")  # 冒号前添加空格
+                self.map_text.insert(tk.END, f"{pos} : {value}\n")
             else:  # 如A11、B12等
-                self.map_text.insert(tk.END, f"{pos}: {value}\n")    # 冒号前不添加空格
+                self.map_text.insert(tk.END, f"{pos}: {value}\n")
+        
+        # 配置选中孔位的样式
+        self.map_text.tag_config("selected", background="yellow", foreground="black", font=("Arial", 10, "bold"))
     
-    def update_visualization(self, negative_positions=None, loc_err_positions=None):
+    def update_visualization(self, warning_positions=None, loc_err_positions=None):
         """更新可视化图表"""
         self.ax.clear()
         
-        if not self.qr_results:
+        if not self.qr_results and self.selected_position is None:
             self.ax.text(0.5, 0.5, "No Data", horizontalalignment='center', verticalalignment='center', transform=self.ax.transAxes)
         else:
             # 创建一个动态大小的网格表示行和列
@@ -738,28 +769,29 @@ class GeeseUI:
             
             # 填充网格
             for pos, value in self.qr_results.items():
-                row = ord(pos[0]) - ord('A')  # A=0, B=1, ..., Z=25
-                col = int(pos[1:]) - 1  # 1=0, 2=1, ..., 20=19
+                row = ord(pos[0]) - ord('A')
+                col = int(pos[1:]) - 1
                 if 0 <= row < self.rows and 0 <= col < self.cols:
-                    grid[row, col] = 1
+                    if value:
+                        grid[row, col] = 1
             
-            # 如果提供了negative和loc_err位置，更新网格
-            if negative_positions is not None and loc_err_positions is not None:
-                # 标记negative位置为2（黄色）
-                for pos in negative_positions:
+            # 如果提供了warning和loc_err位置，更新网格
+            if warning_positions is not None and loc_err_positions is not None:
+                # 标记warning位置为2（黄色）
+                for pos in warning_positions:
                     row = ord(pos[0]) - ord('A')
                     col = int(pos[1:]) - 1
                     if 0 <= row < self.rows and 0 <= col < self.cols:
                         grid[row, col] = 2
                 
-                # 标记loc_err位置为3（红色），优先级高于negative
+                # 标记loc_err位置为3（红色），优先级高于warning
                 for pos in loc_err_positions:
                     row = ord(pos[0]) - ord('A')
                     col = int(pos[1:]) - 1
                     if 0 <= row < self.rows and 0 <= col < self.cols:
                         grid[row, col] = 3
                 
-                # 使用四种颜色：未识别(灰色)、成功(绿色)、negative(黄色)、loc_err(红色)
+                # 使用四种颜色：未识别(灰色)、成功(绿色)、warning(黄色)、loc_err(红色)
                 cmap = plt.cm.colors.ListedColormap(['lightgray', 'green', 'yellow', 'red'])
                 bounds = [-0.5, 0.5, 1.5, 2.5, 3.5]
                 norm = plt.cm.colors.BoundaryNorm(bounds, cmap.N)
@@ -768,6 +800,14 @@ class GeeseUI:
                 cmap = plt.cm.colors.ListedColormap(['lightgray', 'green'])
                 bounds = [-0.5, 0.5, 1.5]
                 norm = plt.cm.colors.BoundaryNorm(bounds, cmap.N)
+            
+            # 标记选中的孔位（优先级最高）
+            if self.selected_position is not None:
+                row = ord(self.selected_position[0]) - ord('A')
+                col = int(self.selected_position[1:]) - 1
+                if 0 <= row < self.rows and 0 <= col < self.cols:
+                    # 使用特殊值4表示选中，在显示时用蓝色边框
+                    grid[row, col] = 4
             
             self.ax.imshow(grid, cmap=cmap, norm=norm, interpolation='nearest')
             
@@ -785,24 +825,112 @@ class GeeseUI:
             # 在方块中心添加位置序号
             for row in range(self.rows):
                 for col in range(self.cols):
-                    # 未识别成功的位置或标记为negative/loc_err的位置
-                    if grid[row, col] == 0 or grid[row, col] == 2 or grid[row, col] == 3:
+                    # 未识别成功的位置或标记为negative/loc_err/选中的位置
+                    if grid[row, col] == 0 or grid[row, col] == 2 or grid[row, col] == 3 or grid[row, col] == 4:
                         pos_label = f"{chr(ord('A') + row)}{col + 1}"
                         # 根据状态选择文字颜色
                         if grid[row, col] == 0:  # 灰色
                             text_color = 'white'
                         elif grid[row, col] == 2:  # 黄色
                             text_color = 'black'
-                        else:  # 红色
+                        elif grid[row, col] == 3:  # 红色
                             text_color = 'white'
+                        else:  # 选中（蓝色）
+                            text_color = 'white'
+                        
+                        # 如果是选中的孔位，添加蓝色边框
+                        if grid[row, col] == 4:
+                            # 先恢复原始颜色
+                            if pos_label in self.qr_results:
+                                grid[row, col] = 1  # 绿色
+                            elif warning_positions and pos_label in warning_positions:
+                                grid[row, col] = 2  # 黄色
+                            elif loc_err_positions and pos_label in loc_err_positions:
+                                grid[row, col] = 3  # 红色
+                            else:
+                                grid[row, col] = 0  # 灰色
                         
                         self.ax.text(col, row, pos_label, 
                                    ha='center', va='center', 
                                    color=text_color, fontsize=10, weight='bold')
             
+            # 为选中的孔位添加蓝色边框
+            if self.selected_position is not None:
+                row = ord(self.selected_position[0]) - ord('A')
+                col = int(self.selected_position[1:]) - 1
+                if 0 <= row < self.rows and 0 <= col < self.cols:
+                    # 绘制蓝色矩形边框
+                    rect = plt.Rectangle((col - 0.45, row - 0.45), 0.9, 0.9, 
+                                     fill=False, edgecolor='blue', linewidth=1.5)
+                    self.ax.add_patch(rect)
+            
             # 不添加颜色条
         
         self.canvas.draw()
+    
+    def on_visualization_click(self, event):
+        """处理可视化区域的点击事件"""
+        if event.inaxes != self.ax:
+            return
+        
+        col = int(round(event.xdata))
+        row = int(round(event.ydata))
+        
+        if 0 <= row < self.rows and 0 <= col < self.cols:
+            self.selected_position = f"{chr(ord('A') + row)}{col + 1}"
+            self.update_visualization()
+            self.update_map()
+    
+    def on_key_press(self, event):
+        """处理键盘输入事件"""
+        if self.selected_position is None:
+            return
+        
+        key = event.keysym
+        char = event.char
+        
+        def update_display():
+            self.update_visualization()
+            self.update_map()
+        
+        if key == 'BackSpace':
+            if self.selected_position in self.qr_results:
+                self.qr_results[self.selected_position] = ""
+            update_display()
+            return
+        
+        if key == 'Escape':
+            self.selected_position = None
+            update_display()
+            return
+        
+        if key == 'Return' or key == 'Enter':
+            if self.selected_position in self.qr_results:
+                value = self.qr_results[self.selected_position]
+                self.log(f"{self.selected_position}: {value}" if value else f"{self.selected_position}: (空)")
+            else:
+                self.log(f"{self.selected_position}: (已删除)")
+            
+            current_row, current_col = ord(self.selected_position[0]) - ord('A'), int(self.selected_position[1:]) - 1
+            
+            for row in range(self.rows):
+                for col in range(self.cols):
+                    if row < current_row or (row == current_row and col <= current_col):
+                        continue
+                    
+                    pos_label = f"{chr(ord('A') + row)}{col + 1}"
+                    if pos_label not in self.qr_results or not self.qr_results[pos_label]:
+                        self.selected_position = pos_label
+                        update_display()
+                        return
+            
+            self.selected_position = None
+            update_display()
+            return
+        
+        if char and char.isprintable():
+            self.qr_results[self.selected_position] = self.qr_results.get(self.selected_position, "") + char
+            update_display()
     
     def recalibrate_template(self, original_rows=None, original_cols=None, was_monitoring=None, was_auto_send=None):
         """重新绘制模板"""

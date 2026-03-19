@@ -27,12 +27,12 @@ def receive_qr_results():
         results_keys = list(data.get('results', {}).keys())
         
         # 随机选择5个键作为negative
-        negative = random.sample(results_keys, min(5, len(results_keys))) if results_keys else []
+        warning = random.sample(results_keys, min(5, len(results_keys))) if results_keys else []
         
-        # 随机选择5个键作为loc_err，确保有2个与negative重复
+        # 随机选择5个键作为loc_err，确保有2个与warning重复
         if len(results_keys) >= 5:
-            # 从negative中随机选择2个
-            common_keys = random.sample(negative, 2) if len(negative) >= 2 else negative
+            # 从warning中随机选择2个
+            common_keys = random.sample(warning, 2) if len(warning) >= 2 else warning
             # 从剩余键中选择3个
             remaining_keys = [k for k in results_keys if k not in common_keys]
             additional_keys = random.sample(remaining_keys, 3) if len(remaining_keys) >= 3 else remaining_keys
@@ -50,7 +50,7 @@ def receive_qr_results():
             'status': 'success',
             'message': '二维码识别结果已接收',
             'data_id': response_data_id,
-            'negative': negative,
+            'warning': warning,
             'loc_err': loc_err
         }), 200
         
