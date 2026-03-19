@@ -5,6 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 
 一个基于计算机视觉的智能孔板二维码识别与监控系统，专为实验室自动化和数据流转而设计。
+这个是增加了工单校对版本
 
 ## 📋 目录
 
