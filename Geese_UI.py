@@ -52,7 +52,7 @@ class GeeseUI:
         self.monitoring = True
         self.auto_send = True  # 自动发送开关
         self.qr_results = {}
-        self.server_url = "http://172.16.1.141:10511/apiEntitySample/GetSampleScanData.json"  # 默认后端接口地址
+        self.server_url = "http://110.110.50.32:8082/librax-server/camera"  # 默认后端接口地址
         self.watch_dir = "picture"  # 默认监控文件夹路径
         self.processing_lock = threading.Lock()  # 图片处理互斥锁
         self.code_mode = "QR"  # 识别模式：QR或DM
