@@ -55,7 +55,9 @@ class GeeseUI:
         self.server_url = "http://172.16.1.141:10511/apiEntitySample/GetSampleScanData.json"  # 默认后端接口地址
         self.watch_dir = "picture"  # 默认监控文件夹路径
         self.processing_lock = threading.Lock()  # 图片处理互斥锁
-        self.code_mode = "DM"  # 识别模式：QR或DM
+        self.code_mode = "QR"  # 识别模式：QR或DM
+        self.work_order_url = "http://110.110.50.32:8082/librax-server/getWorkOrder"
+        self.work_orders = []
         
         # 孔版行列数
         self.rows = 9
@@ -79,6 +81,9 @@ class GeeseUI:
         
         # 加载配置
         self.load_config()
+        
+        # 获取工单列表
+        self.fetch_work_orders()
         
         # 创建处理器
         self._reset_processor_with_template(self.get_template_path())
@@ -223,6 +228,11 @@ class GeeseUI:
         self.send_status_var = tk.StringVar(value="未发送")
         ttk.Label(send_frame, textvariable=self.send_status_var).pack(side=tk.LEFT, padx=5)
         
+        # 工单号选择下拉框
+        self.work_order_var = tk.StringVar()
+        self.work_order_combo = ttk.Combobox(send_frame, textvariable=self.work_order_var, state="readonly", width=20)
+        self.work_order_combo.pack(side=tk.RIGHT, padx=5)
+        
         self.stats_text = scrolledtext.ScrolledText(stats_frame, wrap=tk.WORD, height=18)
         self.stats_text.pack(fill=tk.BOTH, expand=True)
         
@@ -289,6 +299,13 @@ class GeeseUI:
                 
                 # 加载识别模式（QR或DM），默认为QR
                 self.code_mode = config.get('code_mode', 'QR')
+                
+                # 加载工单号地址
+                if "work_order_url" in config:
+                    self.work_order_url = config["work_order_url"]
+                    self.log(f"已加载工单号地址: {self.work_order_url}")
+                else:
+                    self.work_order_url = ""
                 
                 # 更新UI控件的值
                 self.rows_var.set(self.rows)
@@ -357,6 +374,7 @@ class GeeseUI:
             config["cols"] = self.cols
             config["machine_code"] = self.machine_code
             config["code_mode"] = self.code_mode
+            config["work_order_url"] = self.work_order_url
             
             # 保存配置
             with open("config.json", "w") as f:
@@ -371,7 +389,7 @@ class GeeseUI:
         # 创建一个对话框
         dialog = tk.Toplevel(self.root)
         dialog.title("设置接口地址")
-        dialog.geometry("500x170")
+        dialog.geometry("500x250")
         dialog.resizable(False, False)
         
         # 使对话框模态
@@ -387,7 +405,16 @@ class GeeseUI:
         url_var = tk.StringVar(value=self.server_url)
         url_entry = ttk.Entry(url_frame, textvariable=url_var, width=50)
         url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        url_entry.select_range(0, tk.END)  # 选中文本
+        url_entry.select_range(0, tk.END)
+        
+        ttk.Label(dialog, text="工单号地址:").pack(pady=10, padx=10, anchor=tk.W)
+        
+        work_order_frame = ttk.Frame(dialog)
+        work_order_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        work_order_var = tk.StringVar(value=self.work_order_url)
+        work_order_entry = ttk.Entry(work_order_frame, textvariable=work_order_var, width=50)
+        work_order_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # 按钮框架
         button_frame = ttk.Frame(dialog)
@@ -395,11 +422,17 @@ class GeeseUI:
         
         def save_url():
             new_url = url_var.get().strip()
+            new_work_order_url = work_order_var.get().strip()
             if new_url:
                 self.server_url = new_url
+                self.work_order_url = new_work_order_url
                 self.log(f"接口地址已更新为: {new_url}")
+                if new_work_order_url:
+                    self.log(f"工单号地址已更新为: {new_work_order_url}")
                 # 保存配置
                 self.save_config()
+                # 重新获取工单列表
+                self.fetch_work_orders()
                 dialog.destroy()
             else:
                 messagebox.showwarning("警告", "接口地址不能为空")
@@ -637,8 +670,13 @@ class GeeseUI:
             # 计算总位置数 - 使用实际应用的行列数
             total_positions = self.rows * self.cols
             
-            # 生成15位随机数字作为data_id
-            data_id = self.generate_data_id()
+            # 获取用户选择的工单号
+            work_order_number = self.work_order_var.get()
+            if not work_order_number:
+                self.log("请先选择工单号")
+                self.send_status_var.set("未选择工单")
+                messagebox.showwarning("警告", "请先选择工单号")
+                return
             
             # 准备发送的数据
             # 生成所有孔位的位置标签
@@ -652,7 +690,7 @@ class GeeseUI:
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "total_positions": total_positions,
                 "detected_count": len(self.qr_results),
-                "data_id": data_id,
+                "data_id": work_order_number,
                 "machine_id": self.machine_code,
                 "results": all_results
             }
@@ -670,7 +708,7 @@ class GeeseUI:
                 if result.get('status') == 'success':
                     # 验证返回的data_id是否与发送的一致
                     returned_data_id = result.get('data_id')
-                    if returned_data_id == data_id:
+                    if returned_data_id == work_order_number:
                         if auto_send:
                             self.log(f"结果自动发送成功，数据ID验证一致: {returned_data_id}")
                             self.send_status_var.set("已自动发送成功")
@@ -686,10 +724,10 @@ class GeeseUI:
                         self.update_visualization(warning_positions, loc_err_positions)
                     else:
                         # data_id不一致，提示数据返回错误
-                        self.log(f"数据返回错误：发送的data_id({data_id})与返回的data_id({returned_data_id})不一致")
+                        self.log(f"数据返回错误：发送的data_id({work_order_number})与返回的data_id({returned_data_id})不一致")
                         self.send_status_var.set("数据返回错误")
                         messagebox.showerror("数据返回错误", 
-                                           f"发送的data_id({data_id})与返回的data_id({returned_data_id})不一致")
+                                           f"发送的data_id({work_order_number})与返回的data_id({returned_data_id})不一致")
                 else:
                     self.log(f"发送失败: {result.get('message', '未知错误')}")
                     self.send_status_var.set("发送失败")
@@ -703,6 +741,47 @@ class GeeseUI:
         except Exception as e:
             self.log(f"发送结果时出错: {e}")
             self.send_status_var.set("发送错误")
+    
+    def fetch_work_orders(self):
+        """获取工单列表"""
+        if not self.work_order_url:
+            self.log("工单号地址未配置")
+            return
+        
+        # 保存当前选择的工单号
+        current_selection = self.work_order_var.get()
+        
+        try:
+            self.log("正在获取工单列表...")
+            response = requests.get(self.work_order_url, timeout=10)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('code') == 0:
+                    work_orders = result.get('data', [])
+                    self.work_orders = [item.get('number', '') for item in work_orders]
+                    
+                    if self.work_orders:
+                        self.work_order_combo['values'] = self.work_orders
+                        
+                        # 尝试恢复之前选择的工单号
+                        if current_selection and current_selection in self.work_orders:
+                            self.work_order_combo.set(current_selection)
+                            self.log(f"已获取 {len(self.work_orders)} 个工单，保持选择: {current_selection}")
+                        else:
+                            self.work_order_combo.current(0)
+                            self.log(f"已获取 {len(self.work_orders)} 个工单")
+                    else:
+                        self.log("未获取到工单列表")
+                else:
+                    self.log(f"获取工单失败: {result.get('msg', '未知错误')}")
+            else:
+                self.log(f"获取工单失败，HTTP状态码: {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            self.log(f"获取工单请求时出错: {e}")
+        except Exception as e:
+            self.log(f"获取工单时出错: {e}")
     
     def check_and_send_auto(self):
         """检查是否满足自动发送条件并发送结果"""
@@ -776,20 +855,22 @@ class GeeseUI:
                         grid[row, col] = 1
             
             # 如果提供了warning和loc_err位置，更新网格
-            if warning_positions is not None and loc_err_positions is not None:
+            if warning_positions is not None or loc_err_positions is not None:
                 # 标记warning位置为2（黄色）
-                for pos in warning_positions:
-                    row = ord(pos[0]) - ord('A')
-                    col = int(pos[1:]) - 1
-                    if 0 <= row < self.rows and 0 <= col < self.cols:
-                        grid[row, col] = 2
+                if warning_positions:
+                    for pos in warning_positions:
+                        row = ord(pos[0]) - ord('A')
+                        col = int(pos[1:]) - 1
+                        if 0 <= row < self.rows and 0 <= col < self.cols:
+                            grid[row, col] = 2
                 
                 # 标记loc_err位置为3（红色），优先级高于warning
-                for pos in loc_err_positions:
-                    row = ord(pos[0]) - ord('A')
-                    col = int(pos[1:]) - 1
-                    if 0 <= row < self.rows and 0 <= col < self.cols:
-                        grid[row, col] = 3
+                if loc_err_positions:
+                    for pos in loc_err_positions:
+                        row = ord(pos[0]) - ord('A')
+                        col = int(pos[1:]) - 1
+                        if 0 <= row < self.rows and 0 <= col < self.cols:
+                            grid[row, col] = 3
                 
                 # 使用四种颜色：未识别(灰色)、成功(绿色)、warning(黄色)、loc_err(红色)
                 cmap = plt.cm.colors.ListedColormap(['lightgray', 'green', 'yellow', 'red'])
@@ -1314,6 +1395,9 @@ class GeeseUI:
                     self.root.after(0, self.update_stats)
                     self.root.after(0, self.update_map)
                     self.root.after(0, lambda: self.update_visualization())
+                    
+                    # 重新获取工单列表
+                    self.root.after(0, self.fetch_work_orders)
                     
                     # 检查是否需要自动发送
                     self.root.after(0, self.check_and_send_auto)
