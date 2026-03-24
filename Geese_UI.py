@@ -429,6 +429,8 @@ class GeeseUI:
                 self.log(f"接口地址已更新为: {new_url}")
                 if new_work_order_url:
                     self.log(f"工单号地址已更新为: {new_work_order_url}")
+                else:
+                    self.log("工单号地址已清空，将使用随机数模式")
                 # 保存配置
                 self.save_config()
                 # 重新获取工单列表
@@ -672,11 +674,13 @@ class GeeseUI:
             
             # 获取用户选择的工单号
             work_order_number = self.work_order_var.get()
-            if not work_order_number:
-                self.log("请先选择工单号")
-                self.send_status_var.set("未选择工单")
-                messagebox.showwarning("警告", "请先选择工单号")
-                return
+            
+            # 判断是否使用随机数模式
+            use_random_mode = False
+            if not work_order_number or work_order_number == "随机数模式":
+                use_random_mode = True
+                work_order_number = self.generate_data_id()
+                self.log(f"使用随机数模式，生成的data_id: {work_order_number}")
             
             # 准备发送的数据
             # 生成所有孔位的位置标签
@@ -745,8 +749,10 @@ class GeeseUI:
     def fetch_work_orders(self):
         """获取工单列表"""
         if not self.work_order_url:
-            self.log("工单号地址未配置")
+            self.update_work_order_combo_visibility(False)
             return
+        
+        self.update_work_order_combo_visibility(True)
         
         # 保存当前选择的工单号
         current_selection = self.work_order_var.get()
@@ -772,16 +778,33 @@ class GeeseUI:
                             self.work_order_combo.current(0)
                             self.log(f"已获取 {len(self.work_orders)} 个工单")
                     else:
-                        self.log("未获取到工单列表")
+                        self.log("未获取到工单列表，将使用随机数模式")
+                        self.work_order_combo['values'] = ["随机数模式"]
+                        self.work_order_combo.current(0)
                 else:
-                    self.log(f"获取工单失败: {result.get('msg', '未知错误')}")
+                    self.log(f"获取工单失败: {result.get('msg', '未知错误')}，将使用随机数模式")
+                    self.work_order_combo['values'] = ["随机数模式"]
+                    self.work_order_combo.current(0)
             else:
-                self.log(f"获取工单失败，HTTP状态码: {response.status_code}")
+                self.log(f"获取工单失败，HTTP状态码: {response.status_code}，将使用随机数模式")
+                self.work_order_combo['values'] = ["随机数模式"]
+                self.work_order_combo.current(0)
                 
         except requests.exceptions.RequestException as e:
-            self.log(f"获取工单请求时出错: {e}")
+            self.log(f"获取工单请求时出错: {e}，将使用随机数模式")
+            self.work_order_combo['values'] = ["随机数模式"]
+            self.work_order_combo.current(0)
         except Exception as e:
-            self.log(f"获取工单时出错: {e}")
+            self.log(f"获取工单时出错: {e}，将使用随机数模式")
+            self.work_order_combo['values'] = ["随机数模式"]
+            self.work_order_combo.current(0)
+    
+    def update_work_order_combo_visibility(self, show):
+        """更新工单下拉框的显示状态"""
+        if show:
+            self.work_order_combo.pack(side=tk.RIGHT, padx=5)
+        else:
+            self.work_order_combo.pack_forget()
     
     def check_and_send_auto(self):
         """检查是否满足自动发送条件并发送结果"""
