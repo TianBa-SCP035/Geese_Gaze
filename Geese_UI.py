@@ -45,7 +45,7 @@ class GeeseUI:
         self.root = root
         self.root.title("Geese Gaze 监控系统")
         #self.root.minsize(1350, 1080)
-        self.root.maxsize(1700, 4000)
+        self.root.maxsize(1750, 4000)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # 初始化变量
@@ -389,7 +389,7 @@ class GeeseUI:
         # 创建一个对话框
         dialog = tk.Toplevel(self.root)
         dialog.title("设置接口地址")
-        dialog.geometry("500x250")
+        dialog.geometry("650x300")
         dialog.resizable(False, False)
         
         # 使对话框模态
@@ -430,7 +430,7 @@ class GeeseUI:
                 if new_work_order_url:
                     self.log(f"工单号地址已更新为: {new_work_order_url}")
                 else:
-                    self.log("工单号地址已清空，将使用随机数模式")
+                    self.log("工单接口地址已清空")
                 # 保存配置
                 self.save_config()
                 # 重新获取工单列表
@@ -680,7 +680,6 @@ class GeeseUI:
             if not work_order_number or work_order_number == "随机数模式":
                 use_random_mode = True
                 work_order_number = self.generate_data_id()
-                self.log(f"使用随机数模式，生成的data_id: {work_order_number}")
             
             # 准备发送的数据
             # 生成所有孔位的位置标签

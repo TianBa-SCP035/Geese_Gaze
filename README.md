@@ -106,6 +106,10 @@ Geese Gaze 监控系统
    # 方式2：直接运行Python脚本
    python Geese_UI.py
    ```
+5. 接口地址
+   - 油菌核对地址： http://172.16.1.141:10511/apiEntitySample/GetSampleScanData.json
+   - 获取工单接口： http://110.110.50.32:8082/librax-server/getWorkOrder
+   - 上机校对接口： http://110.110.50.32:8082/librax-server/confirmWorkOrder
 
 ## 📖 使用指南
 
